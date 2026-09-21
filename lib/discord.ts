@@ -1,6 +1,6 @@
 const GUILD_ID = process.env.NEXT_PUBLIC_DISCORD_GUILD_ID ?? "";
 
-// Urutkan dari pangkat TERTINGGI ke terendah
+// Urutkan dari pangkat TERTINGGI ke terendah. Ganti ID di bawah dengan ID role Discord-mu.
 const RANK_ROLES: [string, string][] = [
   ["GANTI_ID_ROLE_1", "ABRIGPOL"],
   ["GANTI_ID_ROLE_2", "BRIPDA"],
