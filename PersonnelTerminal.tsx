@@ -63,6 +63,7 @@ type DiscordProfileCache = {
   avatarUrl: string;
   rank: string;
   unit: string;
+  refreshToken?: string; // dipakai untuk menyegarkan data dari Discord tanpa login ulang
 };
 const DISCORD_PROFILE_KEY = "pt-discord-profile-v1";
 
@@ -172,6 +173,18 @@ const XIcon = (p: IconProps) => (
 const CheckIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="m5 12.5 4.5 4.5L19 7" />
+  </Svg>
+);
+const MenuDotsIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 7h16M4 12h16M4 17h16" />
+  </Svg>
+);
+const LogOutIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+    <path d="m16 17 5-5-5-5" />
+    <path d="M21 12H9" />
   </Svg>
 );
 const ArrowLeftIcon = (p: IconProps) => (
@@ -2936,6 +2949,111 @@ function BootLoading({ phase }: { phase: Boot }) {
   );
 }
 
+/** Menu akun: tiga garis di pojok kanan header, berisi profil singkat & Logout. */
+function AccountMenu({ onLogout }: { onLogout: () => void }) {
+  const p = personnel;
+  const [open, setOpen] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <div className="pt-menu" ref={boxRef}>
+        <button
+          ref={btnRef}
+          type="button"
+          className="pt-menu-btn"
+          aria-label="Menu akun"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <MenuDotsIcon size={22} />
+        </button>
+        {open && (
+          <div className="pt-menu-dd" role="menu">
+            <div className="pt-menu-who">
+              <div className="pt-avatar" aria-hidden="true">
+                {p.avatarUrl ? (
+                  <img src={p.avatarUrl} alt="" referrerPolicy="no-referrer" />
+                ) : (
+                  initials(p.name)
+                )}
+              </div>
+              <div>
+                <strong>{p.name}</strong>
+                <span>
+                  {p.rank} &middot; {p.unit}
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="menuitem"
+              className="pt-menu-item pt-menu-danger"
+              onClick={() => {
+                setOpen(false);
+                setConfirm(true);
+              }}
+            >
+              <LogOutIcon size={18} />
+              <span>Logout</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {confirm && (
+        <div className="pt-dialog-wrap" role="presentation" onClick={() => setConfirm(false)}>
+          <div
+            className="pt-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="logout-title"
+            aria-describedby="logout-desc"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="logout-title">Keluar dari akun?</h2>
+            <p id="logout-desc">Kamu harus login Discord lagi untuk membuka aplikasi.</p>
+            <div className="pt-dialog-actions">
+              <button type="button" className="pt-dialog-btn" onClick={() => setConfirm(false)}>
+                Batal
+              </button>
+              <button
+                type="button"
+                className="pt-dialog-btn pt-dialog-danger"
+                onClick={() => {
+                  setConfirm(false);
+                  onLogout();
+                }}
+              >
+                Keluar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 /** Layar login: aplikasi hanya terbuka setelah login Discord. */
 function LoginGate({ loading, onLogin }: { loading: boolean; onLogin: () => void }) {
   const [help, setHelp] = useState(false);
@@ -3032,6 +3150,7 @@ export default function PersonnelTerminal() {
   // seluruh layar (nama/pangkat/devisi ikut berubah otomatis setelah login Discord).
   const [profile, setProfile] = useState<PersonnelData>(() => ({ ...personnel }));
   const syncId = useRef(0);
+  const refreshTokenRef = useRef<string | undefined>(undefined);
   // Status login: "loading" = cek sesi, "out" = belum login, "in" = sudah login Discord
   const [authState, setAuthState] = useState<"loading" | "out" | "in">("loading");
 
@@ -3069,8 +3188,12 @@ export default function PersonnelTerminal() {
       meta.custom_claims?.global_name || meta.full_name || meta.name || "Personil";
     const avatarUrl = meta.avatar_url || "";
     const providerToken = session?.provider_token;
+    // Hanya ada sesaat setelah login; dipakai untuk menyegarkan data nanti tanpa login ulang
+    const providerRefreshToken = (session as unknown as { provider_refresh_token?: string })
+      ?.provider_refresh_token;
 
-    // Token Discord tidak tersedia (mis. setelah refresh halaman) -> pakai cache terakhir
+    // Token Discord tidak tersedia (mis. setelah refresh halaman) -> pakai cache terakhir,
+    // lalu coba segarkan diam-diam dari Discord di belakang layar
     if (!providerToken) {
       const cached = loadDiscordProfile(user.id);
       applyPersonnel({
@@ -3080,6 +3203,8 @@ export default function PersonnelTerminal() {
         unit: cached?.unit ?? "-",
         discordLinked: true,
       });
+      refreshTokenRef.current = cached?.refreshToken;
+      if (cached?.refreshToken) void refreshFromDiscord(user.id, cached.refreshToken);
       return;
     }
 
@@ -3097,7 +3222,58 @@ export default function PersonnelTerminal() {
     if (myId !== syncId.current) return; // sudah ada sync yang lebih baru
 
     applyPersonnel({ name, avatarUrl, rank, unit, discordLinked: true });
-    saveDiscordProfile({ userId: user.id, name, avatarUrl, rank, unit });
+    refreshTokenRef.current = providerRefreshToken;
+    saveDiscordProfile({
+      userId: user.id,
+      name,
+      avatarUrl,
+      rank,
+      unit,
+      refreshToken: providerRefreshToken,
+    });
+  };
+
+  /**
+   * Minta data terbaru langsung dari Discord (nama, foto, pangkat, devisi) lewat
+   * route /api/discord-refresh, tanpa perlu logout/login ulang. Gagal diam-diam:
+   * kalau route belum disiapkan atau token kedaluwarsa, data cache lama tetap dipakai.
+   */
+  const refreshFromDiscord = async (userId: string, refreshToken: string) => {
+    try {
+      const res = await fetch("/api/discord-refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        name?: string;
+        avatarUrl?: string;
+        rank?: string;
+        unit?: string;
+        refreshToken?: string;
+      };
+      if (!data.name) return;
+      applyPersonnel({
+        name: data.name,
+        avatarUrl: data.avatarUrl ?? "",
+        rank: data.rank ?? "-",
+        unit: data.unit ?? "-",
+        discordLinked: true,
+      });
+      const nextRefreshToken = data.refreshToken ?? refreshToken;
+      refreshTokenRef.current = nextRefreshToken;
+      saveDiscordProfile({
+        userId,
+        name: data.name,
+        avatarUrl: data.avatarUrl ?? "",
+        rank: data.rank ?? "-",
+        unit: data.unit ?? "-",
+        refreshToken: nextRefreshToken,
+      });
+    } catch {
+      /* offline / route belum ada -> abaikan, tetap pakai data cache */
+    }
   };
 
   useEffect(() => {
@@ -3106,7 +3282,21 @@ export default function PersonnelTerminal() {
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       syncFromSession(session);
     });
-    return () => listener.subscription.unsubscribe();
+    // Setiap kali tab ini dibuka/aktif lagi, segarkan foto/nama/pangkat dari Discord
+    const onFocus = () => {
+      supabase.auth.getSession().then(({ data }) => {
+        const userId = data.session?.user?.id;
+        if (userId && refreshTokenRef.current) void refreshFromDiscord(userId, refreshTokenRef.current);
+      });
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") onFocus();
+    });
+    return () => {
+      listener.subscription.unsubscribe();
+      window.removeEventListener("focus", onFocus);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -3347,6 +3537,7 @@ export default function PersonnelTerminal() {
                 </span>
                 <h1 className="pt-ops-title">{screen === "laporan" ? "Laporan Ops" : "Absensi Ops"}</h1>
               </div>
+              <AccountMenu onLogout={handleDiscordLogout} />
             </header>
           ) : (
             <header className="pt-header">
@@ -3363,6 +3554,7 @@ export default function PersonnelTerminal() {
                 ) : (
                   <span className="pt-title">{screenTitle[screen]}</span>
                 )}
+                <AccountMenu onLogout={handleDiscordLogout} />
               </div>
             </header>
           )}
@@ -3477,7 +3669,7 @@ const css = `
   background: var(--bg);
 }
 .pt-header-bar {
-  display: flex; align-items: center; min-height: 52px; padding: 0 18px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 52px; padding: 0 12px 0 18px;
   border-radius: 22px; background: var(--card); border: 1px solid var(--line);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
 }
@@ -3777,9 +3969,10 @@ const css = `
 
 /* Menu Laporan (grid kartu) */
 .pt-header-ops {
-  display: flex; align-items: flex-start; justify-content: space-between;
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
   padding: calc(16px + env(safe-area-inset-top, 0px)) 16px 10px;
 }
+.pt-header-ops .pt-ops-head { flex: 1; }
 .pt-back-sq {
   appearance: none; flex: none; width: 40px; height: 40px; border-radius: 13px; cursor: pointer;
   display: grid; place-items: center; color: var(--text);
@@ -4062,6 +4255,65 @@ const css = `
 @media (max-width: 380px) {
   .pt-week .pt-progress-foot { font-size: 11px; gap: 12px; }
 }
+
+/* Menu akun (tiga garis) */
+.pt-menu { position: relative; flex: none; }
+.pt-menu-btn {
+  appearance: none; width: 40px; height: 40px; display: grid; place-items: center;
+  border: 0; border-radius: 14px; background: transparent; color: var(--text); cursor: pointer;
+  -webkit-tap-highlight-color: transparent; transition: background 0.15s ease, transform 0.15s ease;
+}
+.pt-menu-btn:hover { background: rgba(224, 165, 38, 0.1); }
+.pt-menu-btn:active { transform: scale(0.92); }
+.pt-menu-btn[aria-expanded="true"] { background: rgba(224, 165, 38, 0.16); }
+.pt-menu-btn:focus-visible { outline: 2px solid var(--line-hi); outline-offset: 2px; }
+.pt-menu-dd {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 20;
+  width: min(280px, calc(100vw - 32px));
+  background: var(--card-hi, #26211a); border: 1px solid var(--line); border-radius: 16px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55); padding: 8px;
+  transform-origin: top right; animation: pt-menu-pop 0.16s ease-out;
+}
+@keyframes pt-menu-pop { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: scale(1); } }
+.pt-menu-who {
+  display: flex; align-items: center; gap: 10px; padding: 8px 8px 12px;
+  border-bottom: 1px solid var(--line-soft, rgba(224, 165, 38, 0.35)); margin-bottom: 6px;
+}
+.pt-menu-who .pt-avatar { width: 40px; height: 40px; font-size: 14px; }
+.pt-menu-who strong { display: block; font-size: 14px; font-weight: 600; }
+.pt-menu-who span { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+.pt-menu-item {
+  appearance: none; width: 100%; display: flex; align-items: center; gap: 12px;
+  min-height: 46px; padding: 0 10px; border: 0; border-radius: 10px; background: transparent;
+  color: var(--text); font: inherit; font-size: 15px; cursor: pointer; text-align: left;
+}
+.pt-menu-item:hover { background: rgba(255, 255, 255, 0.05); }
+.pt-menu-danger { color: #fca5a5; }
+.pt-menu-danger:hover { background: rgba(239, 68, 68, 0.12); }
+.pt-menu-item:focus-visible { outline: 2px solid var(--line-hi); outline-offset: 2px; }
+
+/* Dialog konfirmasi logout */
+.pt-dialog-wrap {
+  position: fixed; inset: 0; z-index: 30; display: grid; place-items: center;
+  padding: 20px; background: rgba(0, 0, 0, 0.6);
+}
+.pt-dialog {
+  width: min(340px, 100%); background: var(--card-hi, #26211a); border: 1px solid var(--line);
+  border-radius: 18px; padding: 20px; animation: pt-menu-pop 0.18s ease-out;
+}
+.pt-dialog h2 { margin: 0 0 6px; font-size: 18px; font-weight: 600; }
+.pt-dialog p { margin: 0 0 18px; font-size: 14px; line-height: 1.55; color: var(--muted); }
+.pt-dialog-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pt-dialog-btn {
+  appearance: none; min-height: 46px; border-radius: 12px;
+  border: 1px solid var(--line-soft, rgba(224, 165, 38, 0.35)); background: transparent;
+  color: var(--text); font: inherit; font-size: 15px; font-weight: 500; cursor: pointer;
+}
+.pt-dialog-btn:hover { background: rgba(255, 255, 255, 0.05); }
+.pt-dialog-danger { background: var(--red); border-color: var(--red); color: #fff; }
+.pt-dialog-danger:hover { background: #dc2626; }
+.pt-dialog-btn:focus-visible { outline: 2px solid var(--line-hi); outline-offset: 2px; }
+
 /* ---- Layar loading pembuka (BootLoading) ---- */
 .bl-root {
   position: fixed; inset: 0; z-index: 60;
