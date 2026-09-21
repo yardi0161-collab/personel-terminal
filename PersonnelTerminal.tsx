@@ -130,9 +130,11 @@ const HistoryIcon = (p: IconProps) => (
     <path d="M12 7v5l3 2" />
   </Svg>
 );
-const BoltIcon = (p: IconProps) => (
+const ClipboardCheckIcon = (p: IconProps) => (
   <Svg {...p}>
-    <path d="M13 2 4 14h7l-1 8 9-12h-7z" />
+    <rect x="8" y="2" width="8" height="4" rx="1" />
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+    <path d="m9 14 2 2 4-4" />
   </Svg>
 );
 const ClockIcon = (p: IconProps) => (
@@ -141,9 +143,11 @@ const ClockIcon = (p: IconProps) => (
     <path d="M12 7v5l3 2" />
   </Svg>
 );
-const PulseIcon = (p: IconProps) => (
+const ClipboardListIcon = (p: IconProps) => (
   <Svg {...p}>
-    <path d="M2 12h4l3-9 5 18 3-9h5" />
+    <rect x="8" y="2" width="8" height="4" rx="1" />
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+    <path d="M12 11h4M12 16h4M8 11h.01M8 16h.01" />
   </Svg>
 );
 const CalendarCheckIcon = (p: IconProps) => (
@@ -405,17 +409,17 @@ function HomeScreen({
       <div className="pt-grid">
         <button type="button" {...r("pt-card pt-stat pt-link", 1)} onClick={() => onNavigate("absensi")}>
           <div className="pt-deco pt-deco-stat">
-            <BoltIcon size={84} stroke={1.6} />
+            <ClipboardCheckIcon size={84} stroke={1.6} />
           </div>
           <div className="pt-icon-circle pt-icon-blue">
-            <BoltIcon size={22} />
+            <ClipboardCheckIcon size={22} />
           </div>
           <p className="pt-stat-title">Absensi</p>
         </button>
 
         <button type="button" {...r("pt-card pt-stat pt-link", 2)} onClick={() => onNavigate("laporan")}>
           <div className="pt-deco pt-deco-stat">
-            <PulseIcon size={84} stroke={1.6} />
+            <ClipboardListIcon size={84} stroke={1.6} />
           </div>
           <div className="pt-icon-circle pt-icon-green">
             <ClockIcon size={22} />
@@ -531,7 +535,7 @@ const ABSENSI_MENU: {
   desc: string;
   Icon: (p: IconProps) => JSX.Element;
 }[] = [
-  { id: "absensi-form", title: "Absensi", desc: "Report duty harian", Icon: BoltIcon },
+  { id: "absensi-form", title: "Absensi", desc: "Report duty harian", Icon: ClipboardCheckIcon },
   { id: "cuti", title: "Izin Cuti", desc: "Ajukan cuti / izin", Icon: FileTextIcon },
 ];
 
