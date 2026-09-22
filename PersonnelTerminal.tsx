@@ -3151,6 +3151,7 @@ export default function PersonnelTerminal() {
   const [profile, setProfile] = useState<PersonnelData>(() => ({ ...personnel }));
   const syncId = useRef(0);
   const refreshTokenRef = useRef<string | undefined>(undefined);
+  const refreshingRef = useRef(false); // cegah dua panggilan /api/discord-refresh bertabrakan
   // Status login: "loading" = cek sesi, "out" = belum login, "in" = sudah login Discord
   const [authState, setAuthState] = useState<"loading" | "out" | "in">("loading");
 
@@ -3239,6 +3240,8 @@ export default function PersonnelTerminal() {
    * kalau route belum disiapkan atau token kedaluwarsa, data cache lama tetap dipakai.
    */
   const refreshFromDiscord = async (userId: string, refreshToken: string) => {
+    if (refreshingRef.current) return; // sudah ada permintaan penyegaran yang sedang berjalan
+    refreshingRef.current = true;
     try {
       const res = await fetch("/api/discord-refresh", {
         method: "POST",
@@ -3273,6 +3276,8 @@ export default function PersonnelTerminal() {
       });
     } catch {
       /* offline / route belum ada -> abaikan, tetap pakai data cache */
+    } finally {
+      refreshingRef.current = false;
     }
   };
 
