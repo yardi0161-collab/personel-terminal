@@ -347,6 +347,17 @@ function getWeek(attended: number[], now = new Date()) {
     };
   });
 }
+/**
+ * Foto profil dengan fallback otomatis: kalau URL foto gagal dimuat (link rusak,
+ * diblokir, foto sudah dihapus, dsb), otomatis diganti inisial nama, bukan ikon
+ * "gambar rusak" bawaan browser.
+ */
+function Avatar({ url, name }: { url: string; name: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!url || failed) return <>{initials(name)}</>;
+  return <img src={url} alt="" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
+}
+
 const initials = (name: string) =>
   name
     .split(" ")
@@ -415,7 +426,7 @@ function HomeScreen({
       {/* Profil: foto, nama, pangkat, devisi */}
       <section {...r("pt-card pt-profile", 0)}>
         <div className="pt-avatar" aria-label={`Foto profil ${p.name}`}>
-          {p.avatarUrl ? <img src={p.avatarUrl} alt="" referrerPolicy="no-referrer" /> : initials(p.name)}
+          <Avatar url={p.avatarUrl} name={p.name} />
         </div>
         <div className="pt-pf">
           <span>Nama</span>
@@ -815,11 +826,7 @@ function IdentityBlock() {
   return (
     <div className="pt-idcard">
       <div className="pt-avatar" aria-label={`Foto profil ${personnel.name}`}>
-        {personnel.avatarUrl ? (
-          <img src={personnel.avatarUrl} alt="" referrerPolicy="no-referrer" />
-        ) : (
-          initials(personnel.name)
-        )}
+        <Avatar url={personnel.avatarUrl} name={personnel.name} />
       </div>
       <div className="pt-id3">
         <div>
@@ -3012,11 +3019,7 @@ function AccountMenu({ onLogout }: { onLogout: () => void }) {
           <div className="pt-menu-dd" role="menu">
             <div className="pt-menu-who">
               <div className="pt-avatar" aria-hidden="true">
-                {p.avatarUrl ? (
-                  <img src={p.avatarUrl} alt="" referrerPolicy="no-referrer" />
-                ) : (
-                  initials(p.name)
-                )}
+                <Avatar url={p.avatarUrl} name={p.name} />
               </div>
               <div>
                 <strong>{p.name}</strong>
