@@ -2944,20 +2944,20 @@ function SkullIcon() {
     <svg viewBox="0 0 100 100" aria-hidden="true">
       <defs>
         <linearGradient id="dt-g1" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#3ce88a" />
-          <stop offset="100%" stopColor="#0f8a4c" />
+          <stop offset="0%" stopColor="#f5c842" />
+          <stop offset="100%" stopColor="#b5811d" />
         </linearGradient>
       </defs>
       <path
         d="M50 8c-19 0-32 14-32 33 0 12 5 20 10 27l-3 14 12-4 4 6 9-6 9 6 4-6 12 4-3-14c5-7 10-15 10-27 0-19-13-33-32-33z"
         fill="url(#dt-g1)"
-        stroke="#0a3a20"
+        stroke="#3a2c0a"
         strokeWidth="2"
       />
-      <circle cx="37" cy="42" r="7" fill="#04140b" />
-      <circle cx="63" cy="42" r="7" fill="#04140b" />
-      <path d="M46 55h8l-4 8z" fill="#04140b" />
-      <path d="M30 30c4-3 8-4 12-2M70 30c-4-3-8-4-12-2" stroke="#04140b" strokeWidth="2" fill="none" strokeLinecap="round" />
+      <circle cx="37" cy="42" r="7" fill="#1a1408" />
+      <circle cx="63" cy="42" r="7" fill="#1a1408" />
+      <path d="M46 55h8l-4 8z" fill="#1a1408" />
+      <path d="M30 30c4-3 8-4 12-2M70 30c-4-3-8-4-12-2" stroke="#1a1408" strokeWidth="2" fill="none" strokeLinecap="round" />
     </svg>
   );
 }
@@ -3698,15 +3698,19 @@ export default function PersonnelTerminal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const setScreen = (next: Screen) => {
+  // label kosong = pakai teks default "Membuka ..."; isi label sendiri untuk kasus
+  // lain, misalnya "Mengirim Absensi…" setelah form disubmit.
+  const goTo = (next: Screen, label?: string) => {
     if (next === screen) return;
     if (phase !== "done" && phase !== "out") return; // abaikan tap saat sedang memuat
     if (prefersReducedMotion()) {
       commitScreen(next);
       return;
     }
-    play(true, `Membuka ${next === "home" ? "Home" : screenTitle[next]}…`, () => commitScreen(next));
+    const text = label ?? `Membuka ${next === "home" ? "Home" : screenTitle[next]}…`;
+    play(true, text, () => commitScreen(next));
   };
+  const setScreen = (next: Screen) => goTo(next);
 
   const isDetail =
     screen === "absensi" ||
@@ -3835,7 +3839,7 @@ export default function PersonnelTerminal() {
                   setDraft={setDraft}
                   onLog={upsertLog}
                   showToast={showToast}
-                  onSubmitted={() => setScreen("absensi")}
+                  onSubmitted={() => goTo("absensi", "Mengirim Absensi…")}
                 />
               )}
               {screen === "cuti" && (
@@ -3844,7 +3848,7 @@ export default function PersonnelTerminal() {
                   setState={setCutiDraft}
                   onLog={upsertLog}
                   showToast={showToast}
-                  onSubmitted={() => setScreen("absensi")}
+                  onSubmitted={() => goTo("absensi", "Mengirim Izin Cuti…")}
                 />
               )}
               {screen === "laporan" && <LaporanScreen onNavigate={setScreen} />}
@@ -3854,7 +3858,7 @@ export default function PersonnelTerminal() {
                   setState={setEvidence}
                   onLog={upsertLog}
                   showToast={showToast}
-                  onSubmitted={() => setScreen("laporan")}
+                  onSubmitted={() => goTo("laporan", "Mengirim Laporan Evidence…")}
                 />
               )}
               {screen === "cell" && (
@@ -3863,7 +3867,7 @@ export default function PersonnelTerminal() {
                   setState={setCellDraft}
                   onLog={upsertLog}
                   showToast={showToast}
-                  onSubmitted={() => setScreen("laporan")}
+                  onSubmitted={() => goTo("laporan", "Mengirim Laporan Cell Management…")}
                 />
               )}
               {screen === "tilang" && (
@@ -3872,7 +3876,7 @@ export default function PersonnelTerminal() {
                   setState={setTilangDraft}
                   onLog={upsertLog}
                   showToast={showToast}
-                  onSubmitted={() => setScreen("laporan")}
+                  onSubmitted={() => goTo("laporan", "Mengirim Laporan Tilang…")}
                 />
               )}
               {screen === "impound" && (
@@ -3881,7 +3885,7 @@ export default function PersonnelTerminal() {
                   setState={setImpoundDraft}
                   onLog={upsertLog}
                   showToast={showToast}
-                  onSubmitted={() => setScreen("laporan")}
+                  onSubmitted={() => goTo("laporan", "Mengirim Laporan Impound…")}
                 />
               )}
             </div>
@@ -4075,7 +4079,7 @@ const css = `
   position: fixed; inset: 0; z-index: 50;
   display: flex; align-items: center; justify-content: center;
   padding: 24px;
-  background: radial-gradient(ellipse at 50% 100%, rgba(255, 20, 20, 0.1), transparent 60%), #050607;
+  background: radial-gradient(ellipse at 50% 100%, rgba(224, 165, 38, 0.12), transparent 60%), #070603;
   font-family: "Courier New", ui-monospace, Menlo, Consolas, monospace;
   transition: opacity 0.5s ease;
 }
@@ -4084,8 +4088,8 @@ const css = `
 
 .dt-window {
   width: 100%; max-width: 300px;
-  background: linear-gradient(180deg, #0d0f11, #08090a);
-  border: 1px solid #1e2226;
+  background: linear-gradient(180deg, var(--card-2), var(--card));
+  border: 1px solid var(--line);
   border-radius: 18px;
   overflow: hidden;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
@@ -4093,43 +4097,43 @@ const css = `
 }
 .dt-titlebar {
   display: flex; align-items: center; justify-content: center;
-  padding: 12px 16px; border-bottom: 1px solid #1e2226; background: rgba(255, 255, 255, 0.01);
+  padding: 12px 16px; border-bottom: 1px solid var(--line); background: rgba(255, 255, 255, 0.01);
 }
-.dt-name { color: #9aa0a6; font-size: 12px; letter-spacing: 2px; }
+.dt-name { color: var(--muted); font-size: 12px; letter-spacing: 2px; }
 
 .dt-body { padding: 28px 20px 24px; display: flex; flex-direction: column; align-items: center; gap: 20px; }
 .dt-icon-box {
   position: relative;
   width: 92px; height: 92px; border-radius: 18px;
-  background: #0a0b0c; border: 1px solid #16181b;
+  background: var(--bg); border: 1px solid var(--line);
   display: flex; align-items: center; justify-content: center;
   box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.6);
 }
 .dt-icon-box::before {
   content: ""; position: absolute; inset: -16%; border-radius: 50%;
-  background: radial-gradient(circle, rgba(60, 232, 138, 0.18) 0%, transparent 65%);
+  background: radial-gradient(circle, rgba(245, 200, 66, 0.22) 0%, transparent 65%);
   animation: pt-glow 3s ease-in-out infinite;
 }
-.dt-icon-box svg { position: relative; width: 54px; height: 54px; filter: drop-shadow(0 0 10px rgba(60, 232, 138, 0.35)); }
+.dt-icon-box svg { position: relative; width: 54px; height: 54px; filter: drop-shadow(0 0 10px rgba(245, 200, 66, 0.4)); }
 
 .dt-status {
-  width: 100%; background: #0a0b0c; border: 1px solid #17191c; border-radius: 12px;
+  width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 12px;
   padding: 14px 16px; text-align: center; height: 46px;
   display: flex; align-items: center; justify-content: center; overflow: hidden;
 }
 .dt-status span {
-  color: #ff3b3b; font-weight: 700; font-size: 12.5px; letter-spacing: 1px;
-  text-shadow: 0 0 10px rgba(255, 59, 59, 0.5); white-space: nowrap;
+  color: var(--line-hi); font-weight: 700; font-size: 12.5px; letter-spacing: 1px;
+  text-shadow: 0 0 10px rgba(245, 200, 66, 0.5); white-space: nowrap;
   animation: pt-text-in 0.3s ease backwards;
 }
 
 .dt-progress {
   width: 100%; height: 3px; border-radius: 2px; overflow: hidden;
-  background: rgba(255, 59, 59, 0.15);
+  background: rgba(224, 165, 38, 0.15);
 }
 .dt-progress span {
   display: block; height: 100%; width: 40%; border-radius: 2px;
-  background: #ff3b3b; box-shadow: 0 0 8px rgba(255, 59, 59, 0.6);
+  background: var(--line-hi); box-shadow: 0 0 8px rgba(245, 200, 66, 0.6);
   animation: pt-progress-slide 0.9s ease-in-out infinite;
 }
 
