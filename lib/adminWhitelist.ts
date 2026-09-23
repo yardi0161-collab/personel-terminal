@@ -16,7 +16,7 @@
 export const ADMIN_WHITELIST: string[] = [
   // Contoh — ganti dengan nama anggota yang berwenang:
   // "Ian Syah",
-  // "Budi Santoso",
+  // "Ardi",
 ];
 
 /** Cek apakah sebuah nama ada di daftar whitelist (tanpa peduli besar/kecil huruf & spasi). */
