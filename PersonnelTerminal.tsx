@@ -12,6 +12,7 @@ import {
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabaseClient";
 import { fetchDiscordGuildRoles, fetchDiscordProfile, mapRolesToPangkatDivisi } from "@/lib/discord";
+import { isOnAdminWhitelist } from "@/lib/adminWhitelist";
 
 /* ------------------------------------------------------------------ */
 /* Data — default/fallback (dipakai kalau belum login Discord)         */
@@ -4016,7 +4017,12 @@ export default function PersonnelTerminal() {
                   onRemove={removeLog}
                 />
               )}
-              {screen === "admin" && (
+              {screen === "admin" && !isOnAdminWhitelist(profile.name) && (
+                <section className="pt-card">
+                  <p className="pt-muted">Kamu tidak memiliki izin untuk membuka halaman ini.</p>
+                </section>
+              )}
+              {screen === "admin" && isOnAdminWhitelist(profile.name) && (
                 <AdminScreen
                   auth={adminAuth}
                   unlocked={adminUnlocked}
@@ -4047,7 +4053,9 @@ export default function PersonnelTerminal() {
           </main>
 
           <nav className="pt-nav" aria-label="Navigasi utama">
-            {tabs.map(({ id, label, Icon }) => (
+            {tabs
+              .filter((t) => t.id !== "admin" || isOnAdminWhitelist(profile.name))
+              .map(({ id, label, Icon }) => (
               <button
                 key={id}
                 type="button"
