@@ -795,30 +795,70 @@ type LogEntry = {
   endISO?: string; // akhir cuti, YYYY-MM-DD (kind "cuti")
 };
 
-const LOG_STORAGE_KEY = "pt-logs-v1";
 const MAX_LOGS = 200;
 
-function loadLogs(): LogEntry[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(LOG_STORAGE_KEY) ?? "[]");
-    if (!Array.isArray(parsed)) return [];
-    // Log lama (sebelum fitur Admin) belum punya status/name — beri nilai default.
-    return parsed.map((l: LogEntry) => ({
-      ...l,
-      status: l.status ?? "pending",
-      name: l.name ?? personnel.name,
-    }));
-  } catch {
+/** Baris tabel `personnel_logs` di Supabase (snake_case) -> bentuk LogEntry yang dipakai UI. */
+function rowToLogEntry(row: Record<string, unknown>): LogEntry {
+  return {
+    id: Number(row.id),
+    kind: row.kind as LogKind,
+    title: String(row.title ?? ""),
+    subtitle: String(row.subtitle ?? ""),
+    savedAt: row.saved_at ? new Date(row.saved_at as string).getTime() : Date.now(),
+    report: String(row.report ?? ""),
+    status: (row.status as LogStatus) ?? "pending",
+    decidedBy: (row.decided_by as string) ?? undefined,
+    decidedAt: row.decided_at ? new Date(row.decided_at as string).getTime() : undefined,
+    name: (row.name as string) ?? personnel.name,
+    dateISO: (row.date_iso as string) ?? undefined,
+    startISO: (row.start_iso as string) ?? undefined,
+    endISO: (row.end_iso as string) ?? undefined,
+  };
+}
+
+/** LogEntry (dipakai UI) -> baris siap kirim ke tabel `personnel_logs`. */
+function logEntryToRow(entry: LogEntry) {
+  return {
+    id: entry.id,
+    kind: entry.kind,
+    title: entry.title,
+    subtitle: entry.subtitle,
+    saved_at: new Date(entry.savedAt).toISOString(),
+    report: entry.report,
+    status: entry.status,
+    decided_by: entry.decidedBy ?? null,
+    decided_at: entry.decidedAt ? new Date(entry.decidedAt).toISOString() : null,
+    name: entry.name,
+    date_iso: entry.dateISO ?? null,
+    start_iso: entry.startISO ?? null,
+    end_iso: entry.endISO ?? null,
+  };
+}
+
+/** Ambil semua log dari Supabase, terbaru dulu. Dipakai semua perangkat/anggota. */
+async function fetchLogs(): Promise<LogEntry[]> {
+  const { data, error } = await supabase
+    .from("personnel_logs")
+    .select("*")
+    .order("saved_at", { ascending: false })
+    .limit(MAX_LOGS);
+  if (error || !data) {
+    if (error) console.error("Gagal memuat log dari Supabase:", error.message);
     return [];
   }
+  return data.map(rowToLogEntry);
 }
-function saveLogs(logs: LogEntry[]) {
-  try {
-    window.localStorage.setItem(LOG_STORAGE_KEY, JSON.stringify(logs));
-  } catch {
-    /* penyimpanan penuh / dinonaktifkan — log tetap ada selama halaman terbuka */
-  }
+
+/** Simpan satu entri log ke Supabase (insert baru, atau timpa kalau id sudah ada). */
+async function upsertLogRow(entry: LogEntry) {
+  const { error } = await supabase.from("personnel_logs").upsert(logEntryToRow(entry));
+  if (error) console.error("Gagal menyimpan log ke Supabase:", error.message);
+}
+
+/** Hapus satu entri log dari Supabase. */
+async function deleteLogRow(id: number) {
+  const { error } = await supabase.from("personnel_logs").delete().eq("id", id);
+  if (error) console.error("Gagal menghapus log dari Supabase:", error.message);
 }
 
 const formatSavedAt = (ms: number) => {
@@ -2193,24 +2233,29 @@ function LogScreen({ logs, onRemove }: { logs: LogEntry[]; onRemove: (id: number
 type AdminAccess = { name: string };
 type AdminAuth = { pin: string; access: AdminAccess[] };
 
-const ADMIN_AUTH_KEY = "pt-admin-auth-v1";
+const ADMIN_SETTINGS_ID = 1; // satu baris tunggal di tabel admin_settings
 
-function loadAdminAuth(): AdminAuth | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(ADMIN_AUTH_KEY) ?? "null");
-    if (parsed && typeof parsed.pin === "string" && Array.isArray(parsed.access)) return parsed;
-    return null;
-  } catch {
+/** Ambil PIN Admin + daftar akses dari Supabase (dipakai semua perangkat). */
+async function fetchAdminAuth(): Promise<AdminAuth | null> {
+  const { data, error } = await supabase
+    .from("admin_settings")
+    .select("pin, access")
+    .eq("id", ADMIN_SETTINGS_ID)
+    .maybeSingle();
+  if (error) {
+    console.error("Gagal memuat pengaturan Admin:", error.message);
     return null;
   }
+  if (!data || typeof data.pin !== "string") return null;
+  return { pin: data.pin, access: Array.isArray(data.access) ? data.access : [] };
 }
-function saveAdminAuth(auth: AdminAuth) {
-  try {
-    window.localStorage.setItem(ADMIN_AUTH_KEY, JSON.stringify(auth));
-  } catch {
-    /* penyimpanan penuh / dinonaktifkan */
-  }
+
+/** Simpan PIN Admin + daftar akses ke Supabase. */
+async function saveAdminAuthRow(auth: AdminAuth) {
+  const { error } = await supabase
+    .from("admin_settings")
+    .upsert({ id: ADMIN_SETTINGS_ID, pin: auth.pin, access: auth.access });
+  if (error) console.error("Gagal menyimpan pengaturan Admin:", error.message);
 }
 
 /** Pemilik akun selalu boleh masuk; selain itu hanya nama di daftar akses. */
@@ -3665,17 +3710,48 @@ export default function PersonnelTerminal() {
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const draftRef = useRef(draft);
   draftRef.current = draft;
-  // Log: laporan/absensi yang sudah dikirim (dipulihkan dari localStorage)
-  const [logs, setLogs] = useState<LogEntry[]>(loadLogs);
-  useEffect(() => saveLogs(logs), [logs]);
-  const upsertLog = (entry: LogEntry) =>
-    setLogs((ls) => [entry, ...ls.filter((l) => l.id !== entry.id)].slice(0, MAX_LOGS));
-  const removeLog = (id: number) => setLogs((ls) => ls.filter((l) => l.id !== id));
-
-  // Admin: PIN + daftar akses tersimpan di localStorage; status login hanya berlaku selama sesi ini.
-  const [adminAuth, setAdminAuth] = useState<AdminAuth | null>(loadAdminAuth);
+  // Log: laporan/absensi/cuti seluruh anggota, disimpan di Supabase (bukan localStorage lagi)
+  // supaya Admin bisa melihatnya dari perangkat manapun.
+  const [logs, setLogs] = useState<LogEntry[]>([]);
   useEffect(() => {
-    if (adminAuth) saveAdminAuth(adminAuth);
+    let active = true;
+    fetchLogs().then((data) => {
+      if (active) setLogs(data);
+    });
+    // Realtime: kalau anggota lain kirim/ubah log dari perangkat lain, muat ulang di sini juga.
+    const channel = supabase
+      .channel("personnel_logs_changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "personnel_logs" }, () => {
+        fetchLogs().then((data) => active && setLogs(data));
+      })
+      .subscribe();
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
+  }, []);
+  const upsertLog = (entry: LogEntry) => {
+    setLogs((ls) => [entry, ...ls.filter((l) => l.id !== entry.id)].slice(0, MAX_LOGS));
+    upsertLogRow(entry); // simpan ke Supabase di latar belakang
+  };
+  const removeLog = (id: number) => {
+    setLogs((ls) => ls.filter((l) => l.id !== id));
+    deleteLogRow(id);
+  };
+
+  // Admin: PIN + daftar akses tersimpan di Supabase (berlaku untuk semua perangkat);
+  // status "sedang login" tetap hanya berlaku selama sesi ini.
+  const [adminAuth, setAdminAuth] = useState<AdminAuth | null>(null);
+  const skipNextAdminAuthSave = useRef(true); // hindari upsert ulang persis setelah fetch awal
+  useEffect(() => {
+    fetchAdminAuth().then(setAdminAuth);
+  }, []);
+  useEffect(() => {
+    if (skipNextAdminAuthSave.current) {
+      skipNextAdminAuthSave.current = false;
+      return;
+    }
+    if (adminAuth) saveAdminAuthRow(adminAuth);
   }, [adminAuth]);
   const [adminUnlocked, setAdminUnlocked] = useState(false);
   const [adminUser, setAdminUser] = useState<string | null>(null);
@@ -3713,10 +3789,17 @@ export default function PersonnelTerminal() {
     setAdminAuth({ ...adminAuth, pin: newPin });
     return true;
   };
-  const decideLog = (id: number, status: "approved" | "rejected") =>
-    setLogs((ls) =>
-      ls.map((l) => (l.id === id ? { ...l, status, decidedBy: adminUser ?? undefined, decidedAt: Date.now() } : l))
-    );
+  const decideLog = (id: number, status: "approved" | "rejected") => {
+    const decidedAt = Date.now();
+    setLogs((ls) => {
+      const next = ls.map((l) =>
+        l.id === id ? { ...l, status, decidedBy: adminUser ?? undefined, decidedAt } : l
+      );
+      const updated = next.find((l) => l.id === id);
+      if (updated) upsertLogRow(updated); // simpan keputusan ke Supabase
+      return next;
+    });
+  };
 
   const [cutiDraft, setCutiDraft] = useState<CutiDraft>(emptyCuti);
   const [evidence, setEvidence] = useState<EvidenceDraft>(emptyEvidence);
