@@ -789,6 +789,10 @@ type LogEntry = {
   status: LogStatus; // status persetujuan Admin
   decidedBy?: string; // nama admin yang menyetujui/menolak
   decidedAt?: number; // ms sejak epoch saat diputuskan
+  name: string; // nama anggota pengirim (dipakai Admin untuk kotak per-anggota)
+  dateISO?: string; // tanggal absensi, YYYY-MM-DD (kind "absensi")
+  startISO?: string; // awal cuti, YYYY-MM-DD (kind "cuti")
+  endISO?: string; // akhir cuti, YYYY-MM-DD (kind "cuti")
 };
 
 const LOG_STORAGE_KEY = "pt-logs-v1";
@@ -799,8 +803,12 @@ function loadLogs(): LogEntry[] {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(LOG_STORAGE_KEY) ?? "[]");
     if (!Array.isArray(parsed)) return [];
-    // Log lama (sebelum fitur Admin) belum punya status — anggap "pending".
-    return parsed.map((l: LogEntry) => ({ ...l, status: l.status ?? "pending" }));
+    // Log lama (sebelum fitur Admin) belum punya status/name — beri nilai default.
+    return parsed.map((l: LogEntry) => ({
+      ...l,
+      status: l.status ?? "pending",
+      name: l.name ?? personnel.name,
+    }));
   } catch {
     return [];
   }
@@ -962,6 +970,8 @@ function AbsensiForm({
       title: formatDate(draft.date),
       subtitle: `${draft.start} – ${draft.end} · ${dur}`,
       report: buildReport(draft, dur),
+      name: personnel.name,
+      dateISO: draft.date,
     });
     patch({ submitted: true, logId: id });
   };
@@ -1185,6 +1195,9 @@ function CutiScreen({
       title: `${state.jenis} · ${formatDate(state.start)} – ${formatDate(state.end)}`,
       subtitle: `${hari ? `${hari} hari` : ""} · ${state.reason.trim()}`,
       report: buildCutiReport(state, hari),
+      name: state.name.trim() || personnel.name,
+      startISO: state.start,
+      endISO: state.end,
     });
     patch({ submitted: true, logId: id });
   };
@@ -1348,6 +1361,7 @@ function EvidenceScreen({
       title: `Penggeledahan · ${state.suspect.trim()}`,
       subtitle: `Kasus: ${state.caseName.trim()}`,
       report: buildEvidenceReport(state),
+      name: personnel.name,
     });
     patch({ submitted: true, logId: id });
   };
@@ -1518,6 +1532,7 @@ function CellScreen({
       title: `Penahanan · ${state.suspect.trim()}`,
       subtitle: `${state.pasal.trim()} · ${state.masa.trim()}`,
       report: buildCellReport(state),
+      name: personnel.name,
     });
     patch({ submitted: true, logId: id });
   };
@@ -1706,6 +1721,7 @@ function TilangScreen({
       title: `Tilang · ${state.plate.trim()}`,
       subtitle: `${state.violator.trim()} · ${state.fine.trim()}`,
       report: buildTilangReport(state),
+      name: personnel.name,
     });
     patch({ submitted: true, logId: id });
   };
@@ -1898,6 +1914,7 @@ function ImpoundScreen({
       title: `Impound · ${state.plate.trim()}`,
       subtitle: `${state.owner.trim()} · ${state.fee.trim()}`,
       report: buildImpoundReport(state),
+      name: personnel.name,
     });
     patch({ submitted: true, logId: id });
   };
@@ -2445,6 +2462,261 @@ function AdminApprovals({
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Admin — kotak per-anggota: "Absensi Anggota" & "Laporan Anggota"    */
+/* Setiap anggota yang pernah mengirim data otomatis dapat kotak       */
+/* sendiri-sendiri, dan tiap kotak/menu bisa dibuka-tutup.             */
+/* ------------------------------------------------------------------ */
+type DayDot = "hijau" | "merah" | "biru";
+
+const DOT_LABEL: Record<DayDot, string> = {
+  hijau: "Sudah absen hari ini",
+  merah: "Belum absen sama sekali",
+  biru: "Sedang izin / cuti",
+};
+
+function isCutiOnDate(l: LogEntry, iso: string) {
+  return (
+    l.kind === "cuti" &&
+    l.status !== "rejected" &&
+    !!l.startISO &&
+    !!l.endISO &&
+    l.startISO <= iso &&
+    iso <= l.endISO
+  );
+}
+
+function dayDotFor(name: string, logs: LogEntry[], iso: string): DayDot {
+  const mine = logs.filter((l) => l.name === name);
+  if (mine.some((l) => isCutiOnDate(l, iso))) return "biru";
+  if (mine.some((l) => l.kind === "absensi" && l.dateISO === iso)) return "hijau";
+  return "merah";
+}
+
+function MemberLogList({ entries }: { entries: LogEntry[] }) {
+  const [openId, setOpenId] = useState<number | null>(null);
+  if (entries.length === 0) {
+    return <p className="pt-photo-hint pt-member-empty">Belum ada data.</p>;
+  }
+  return (
+    <ul className="pt-log-list pt-member-list">
+      {entries.map((entry) => {
+        const { label, Icon } = LOG_KIND_META[entry.kind];
+        const st = STATUS_META[entry.status];
+        const open = openId === entry.id;
+        return (
+          <li key={entry.id} className={`pt-log-item ${open ? "is-open" : ""}`}>
+            <button
+              type="button"
+              className="pt-log-head"
+              aria-expanded={open}
+              onClick={() => setOpenId(open ? null : entry.id)}
+            >
+              <span className="pt-ops-ico pt-log-ico">
+                <Icon size={18} />
+              </span>
+              <span className="pt-log-text">
+                <span className="pt-log-kind">{label}</span>
+                <strong className="pt-log-title">{entry.title}</strong>
+                <span className="pt-log-sub">{entry.subtitle}</span>
+                <span className="pt-log-time">{formatSavedAt(entry.savedAt)}</span>
+              </span>
+              <span className={`pt-status-pill ${st.className}`}>{st.label}</span>
+              <ChevronDownIcon size={18} className="pt-log-chev" />
+            </button>
+            {open && (
+              <div className="pt-log-body">
+                <pre className="pt-report">{entry.report}</pre>
+              </div>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function MemberBox({
+  name,
+  logs,
+  kindFilter,
+  showTanggal,
+  defaultOpen = true,
+}: {
+  name: string;
+  logs: LogEntry[];
+  kindFilter: (k: LogKind) => boolean;
+  showTanggal: boolean;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const [tab, setTab] = useState<"absensi" | "tanggal">("absensi");
+  const mine = logs.filter((l) => l.name === name && kindFilter(l.kind)).sort((a, b) => b.savedAt - a.savedAt);
+  const todayIso = todayISO();
+  const todayStatus = dayDotFor(name, logs, todayIso);
+
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDow = (new Date(year, month, 1).getDay() + 6) % 7; // Senin = 0
+
+  return (
+    <section className={`pt-member-box ${open ? "" : "is-closed"}`}>
+      <button
+        type="button"
+        className="pt-member-head"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span className="pt-member-avatar">{initials(name)}</span>
+        <span className="pt-member-name">
+          <strong>{name}</strong>
+        </span>
+        {showTanggal && <span className={`pt-status-dot is-${todayStatus}`} aria-hidden />}
+        <ChevronDownIcon size={18} className="pt-member-chev" />
+      </button>
+
+      {open && (
+        <div className="pt-member-body">
+          {showTanggal && (
+            <div className="pt-seg pt-member-tabs" role="tablist" aria-label={`Menu ${name}`}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === "absensi"}
+                className={`pt-seg-btn ${tab === "absensi" ? "is-active" : ""}`}
+                onClick={() => setTab("absensi")}
+              >
+                Absensi
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === "tanggal"}
+                className={`pt-seg-btn ${tab === "tanggal" ? "is-active" : ""}`}
+                onClick={() => setTab("tanggal")}
+              >
+                Tanggal
+              </button>
+            </div>
+          )}
+
+          {showTanggal && tab === "tanggal" ? (
+            <div className="pt-member-cal">
+              {DAY_SHORT.map((d) => (
+                <span key={d} className="pt-cal-dname">
+                  {d[0]}
+                </span>
+              ))}
+              {Array.from({ length: firstDow }).map((_, i) => (
+                <span key={`b${i}`} className="pt-cal-day is-blank" />
+              ))}
+              {Array.from({ length: daysInMonth }).map((_, i) => {
+                const day = i + 1;
+                const iso = `${year}-${pad2(month + 1)}-${pad2(day)}`;
+                const isFuture = iso > todayIso;
+                const st = isFuture ? null : dayDotFor(name, logs, iso);
+                const isToday = iso === todayIso;
+                return (
+                  <span
+                    key={day}
+                    className={`pt-cal-day ${st ? `is-${st}` : "is-empty"} ${isToday ? "is-today" : ""}`}
+                  >
+                    {day}
+                  </span>
+                );
+              })}
+            </div>
+          ) : (
+            <>
+              {showTanggal && (
+                <div className={`pt-member-today is-${todayStatus}`}>
+                  <span className={`pt-status-dot is-${todayStatus}`} aria-hidden />
+                  <span>{DOT_LABEL[todayStatus]}</span>
+                </div>
+              )}
+              <MemberLogList entries={mine} />
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AdminMembers({ logs }: { logs: LogEntry[] }) {
+  const [openAbsensi, setOpenAbsensi] = useState(true);
+  const [openLaporan, setOpenLaporan] = useState(false);
+
+  const names = Array.from(new Set(logs.map((l) => l.name))).sort((a, b) => a.localeCompare(b));
+
+  if (names.length === 0) {
+    return (
+      <section className="pt-card pt-log-empty">
+        <p className="pt-log-empty-title">Belum ada anggota yang mengirim data</p>
+        <p className="pt-extra-text">
+          Kotak per-anggota otomatis muncul di sini setelah ada Absensi, Cuti, atau Laporan yang dikirim.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <div className="pt-stack">
+      <section className={`pt-card pt-acc ${openAbsensi ? "" : "is-closed"}`}>
+        <button
+          type="button"
+          className="pt-acc-head"
+          aria-expanded={openAbsensi}
+          onClick={() => setOpenAbsensi((o) => !o)}
+        >
+          <strong>📋 Absensi Anggota</strong>
+          <ChevronDownIcon size={20} className="pt-acc-chev" />
+        </button>
+        {openAbsensi && (
+          <div className="pt-acc-body">
+            {names.map((name) => (
+              <MemberBox
+                key={name}
+                name={name}
+                logs={logs}
+                kindFilter={(k) => k === "absensi" || k === "cuti"}
+                showTanggal
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className={`pt-card pt-acc ${openLaporan ? "" : "is-closed"}`}>
+        <button
+          type="button"
+          className="pt-acc-head"
+          aria-expanded={openLaporan}
+          onClick={() => setOpenLaporan((o) => !o)}
+        >
+          <strong>📝 Laporan Anggota</strong>
+          <ChevronDownIcon size={20} className="pt-acc-chev" />
+        </button>
+        {openLaporan && (
+          <div className="pt-acc-body">
+            {names.map((name) => (
+              <MemberBox
+                key={name}
+                name={name}
+                logs={logs}
+                kindFilter={(k) => k !== "absensi" && k !== "cuti"}
+                showTanggal={false}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function AdminAccessManager({
   auth,
   onAddAccess,
@@ -2609,6 +2881,8 @@ function AdminScreen({
       </section>
 
       <AdminApprovals logs={logs} onDecide={onDecide} />
+
+      <AdminMembers logs={logs} />
 
       {isOwner && (
         <AdminAccessManager
@@ -4168,6 +4442,60 @@ const css = `
 .pt-status-pill.is-pending { background: rgba(224, 165, 38, 0.16); color: var(--line-hi); }
 .pt-status-pill.is-approved { background: rgba(16, 217, 160, 0.16); color: var(--green); }
 .pt-status-pill.is-rejected { background: rgba(239, 68, 68, 0.14); color: #ef5350; }
+
+/* Admin — accordion menu (Absensi Anggota / Laporan Anggota) */
+.pt-acc { padding: 0; overflow: hidden; }
+.pt-acc-head {
+  width: 100%; display: flex; align-items: center; gap: 10px; cursor: pointer;
+  background: none; border: none; color: var(--text); padding: 16px 18px; text-align: left; font: inherit;
+}
+.pt-acc-head strong { flex: 1; font-size: 14.5px; }
+.pt-acc-chev { flex: none; color: var(--muted); transition: transform 0.2s ease; }
+.pt-acc.is-closed .pt-acc-chev { transform: rotate(-90deg); }
+.pt-acc-body { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 12px; }
+.pt-acc-head:focus-visible { outline: 2px solid var(--line-hi); outline-offset: -2px; }
+
+/* Admin — kotak per-anggota */
+.pt-member-box { border-radius: 18px; background: var(--card-2); border: 1px solid var(--line); overflow: hidden; }
+.pt-member-head {
+  width: 100%; display: flex; align-items: center; gap: 10px; cursor: pointer;
+  background: none; border: none; color: var(--text); padding: 12px 14px; text-align: left; font: inherit;
+}
+.pt-member-avatar {
+  flex: none; width: 32px; height: 32px; border-radius: 999px; display: flex; align-items: center;
+  justify-content: center; font-size: 11.5px; font-weight: 700; background: var(--card); border: 1px solid var(--line);
+}
+.pt-member-name { flex: 1; min-width: 0; }
+.pt-member-name strong { font-size: 13.5px; display: block; }
+.pt-member-chev { flex: none; color: var(--muted); transition: transform 0.2s ease; }
+.pt-member-box.is-closed .pt-member-chev { transform: rotate(-90deg); }
+.pt-member-body { padding: 0 14px 14px; }
+.pt-member-empty { padding: 4px 0 6px; }
+.pt-member-list { gap: 8px; }
+.pt-member-tabs { margin-bottom: 10px; }
+
+.pt-status-dot { flex: none; width: 9px; height: 9px; border-radius: 999px; }
+.pt-status-dot.is-hijau { background: var(--green); box-shadow: 0 0 6px rgba(16, 217, 160, 0.6); }
+.pt-status-dot.is-merah { background: var(--red); box-shadow: 0 0 6px rgba(239, 68, 68, 0.6); }
+.pt-status-dot.is-biru { background: var(--blue); box-shadow: 0 0 6px rgba(59, 130, 246, 0.6); }
+
+.pt-member-today {
+  display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-radius: 12px;
+  background: var(--card); border: 1px solid var(--line); font-size: 12.5px; font-weight: 600; margin-bottom: 10px;
+}
+
+.pt-member-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.pt-cal-dname { text-align: center; font-size: 9.5px; font-weight: 700; color: var(--muted); padding-bottom: 2px; }
+.pt-cal-day {
+  aspect-ratio: 1; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  font-size: 11px; background: var(--card); border: 1px solid transparent; color: var(--text);
+}
+.pt-cal-day.is-blank { background: none; }
+.pt-cal-day.is-empty { color: var(--muted); opacity: 0.45; }
+.pt-cal-day.is-hijau { border-color: var(--green); color: var(--green); }
+.pt-cal-day.is-merah { border-color: var(--red); color: var(--red); opacity: 0.9; }
+.pt-cal-day.is-biru { border-color: var(--blue); color: var(--blue); }
+.pt-cal-day.is-today { box-shadow: 0 0 0 2px var(--line-hi) inset; }
 
 /* Compact typography — dibuat lebih kecil agar tampilan mobile tidak terasa besar */
 .pt-root { font-size: 14px; }
