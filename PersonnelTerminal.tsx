@@ -3814,6 +3814,23 @@ export default function PersonnelTerminal() {
   impoundRef.current = impoundDraft;
   const evidenceRef = useRef(evidence);
   evidenceRef.current = evidence;
+
+  // Saat akun Discord berganti (login akun lain / logout-login), semua draft form
+  // yang belum dikirim di-reset. Tanpa ini, field "name" di form tetap memakai nama
+  // akun sebelumnya karena useState hanya membaca personnel.name sekali saat mount —
+  // ini juga sekaligus mencegah draft setengah-isi milik akun lama terbawa ke akun baru.
+  const prevProfileNameRef = useRef(profile.name);
+  useEffect(() => {
+    if (prevProfileNameRef.current === profile.name) return;
+    prevProfileNameRef.current = profile.name;
+    setDraft(emptyDraft());
+    setCutiDraft(emptyCuti());
+    setEvidence(emptyEvidence());
+    setCellDraft(emptyCellDraft());
+    setTilangDraft(emptyTilang());
+    setImpoundDraft(emptyImpound());
+  }, [profile.name]);
+
   useEffect(
     () => () => {
       draftRef.current.photos.forEach((ph) => ph && URL.revokeObjectURL(ph.url));
