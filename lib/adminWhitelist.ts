@@ -14,7 +14,7 @@
  * aplikasi (tabel admin_settings di Supabase), bukan lewat file ini.
  */
 export const ADMIN_WHITELIST: string[] = [
-  "Ardi",
+  "Ardii",
 ];
 
 /** Cek apakah sebuah nama ada di daftar whitelist (tanpa peduli besar/kecil huruf & spasi). */
