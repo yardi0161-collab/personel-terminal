@@ -3011,6 +3011,9 @@ function DataTransferSplash({
           <div className="dt-status">
             <span key={idx}>{messages[idx]}</span>
           </div>
+          <div className="dt-progress" aria-hidden="true">
+            <span />
+          </div>
         </div>
       </div>
     </div>
@@ -4120,9 +4123,23 @@ const css = `
   animation: pt-text-in 0.3s ease backwards;
 }
 
+.dt-progress {
+  width: 100%; height: 3px; border-radius: 2px; overflow: hidden;
+  background: rgba(255, 59, 59, 0.15);
+}
+.dt-progress span {
+  display: block; height: 100%; width: 40%; border-radius: 2px;
+  background: #ff3b3b; box-shadow: 0 0 8px rgba(255, 59, 59, 0.6);
+  animation: pt-progress-slide 0.9s ease-in-out infinite;
+}
+
 @keyframes pt-logo-in { from { opacity: 0; transform: scale(0.88); } to { opacity: 1; transform: none; } }
 @keyframes pt-glow { 0%, 100% { opacity: 0.6; transform: scale(0.96); } 50% { opacity: 1; transform: scale(1.04); } }
 @keyframes pt-text-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes pt-progress-slide {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(280%); }
+}
 
 /* Main */
 .pt-main { flex: 1; padding: 12px 16px 110px; }
@@ -4726,7 +4743,7 @@ const css = `
 
 @media (prefers-reduced-motion: reduce) {
   .pt-bar-fill, .pt-tab, .pt-link, .pt-input, .pt-submit, .pt-secondary, .pt-ops-card, .pt-back-sq, .pt-seg-btn, .pt-log-chev { transition: none; }
-  .dt-icon-box::before, .dt-status span { animation: none; }
+  .dt-icon-box::before, .dt-status span, .dt-progress span { animation: none; }
   .dt-window { animation: none; }
   .pt-page, .pt-rise { animation: none; }
 }
