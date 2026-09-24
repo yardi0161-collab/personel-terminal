@@ -799,6 +799,7 @@ type LogEntry = {
   decidedBy?: string; // nama admin yang menyetujui/menolak
   decidedAt?: number; // ms sejak epoch saat diputuskan
   name: string; // nama anggota pengirim (dipakai Admin untuk kotak per-anggota)
+  avatarUrl?: string; // foto profil pengirim saat mengirim (dipakai Admin untuk kotak per-anggota)
   dateISO?: string; // tanggal absensi, YYYY-MM-DD (kind "absensi")
   startISO?: string; // awal cuti, YYYY-MM-DD (kind "cuti")
   endISO?: string; // akhir cuti, YYYY-MM-DD (kind "cuti")
@@ -819,6 +820,7 @@ function rowToLogEntry(row: Record<string, unknown>): LogEntry {
     decidedBy: (row.decided_by as string) ?? undefined,
     decidedAt: row.decided_at ? new Date(row.decided_at as string).getTime() : undefined,
     name: (row.name as string) ?? personnel.name,
+    avatarUrl: (row.avatar_url as string) ?? undefined,
     dateISO: (row.date_iso as string) ?? undefined,
     startISO: (row.start_iso as string) ?? undefined,
     endISO: (row.end_iso as string) ?? undefined,
@@ -838,6 +840,7 @@ function logEntryToRow(entry: LogEntry) {
     decided_by: entry.decidedBy ?? null,
     decided_at: entry.decidedAt ? new Date(entry.decidedAt).toISOString() : null,
     name: entry.name,
+    avatar_url: entry.avatarUrl ?? null,
     date_iso: entry.dateISO ?? null,
     start_iso: entry.startISO ?? null,
     end_iso: entry.endISO ?? null,
@@ -1031,6 +1034,7 @@ function AbsensiForm({
       subtitle: `${draft.start} – ${draft.end} · ${dur}`,
       report: buildReport(draft, dur),
       name: personnel.name,
+      avatarUrl: personnel.avatarUrl,
       dateISO: draft.date,
     });
     showToast("Absensi telah terkirim, tunggu hingga di-ACC.", "ok");
@@ -1243,6 +1247,7 @@ function CutiScreen({
       subtitle: `${hari ? `${hari} hari` : ""} · ${state.reason.trim()}`,
       report: buildCutiReport(state, hari),
       name: state.name.trim() || personnel.name,
+      avatarUrl: personnel.avatarUrl,
       startISO: state.start,
       endISO: state.end,
     });
@@ -1407,6 +1412,7 @@ function EvidenceScreen({
       subtitle: `Kasus: ${state.caseName.trim()}`,
       report: buildEvidenceReport(state),
       name: personnel.name,
+      avatarUrl: personnel.avatarUrl,
     });
     showToast("Laporan Evidence telah terkirim, tunggu hingga di-ACC.", "ok");
     state.photos.forEach((ph) => URL.revokeObjectURL(ph.url));
@@ -1574,6 +1580,7 @@ function CellScreen({
       subtitle: `${state.pasal.trim()} · ${state.masa.trim()}`,
       report: buildCellReport(state),
       name: personnel.name,
+      avatarUrl: personnel.avatarUrl,
     });
     showToast("Laporan Cell Management telah terkirim, tunggu hingga di-ACC.", "ok");
     state.photos.forEach((ph) => URL.revokeObjectURL(ph.url));
@@ -1759,6 +1766,7 @@ function TilangScreen({
       subtitle: `${state.violator.trim()} · ${state.fine.trim()}`,
       report: buildTilangReport(state),
       name: personnel.name,
+      avatarUrl: personnel.avatarUrl,
     });
     showToast("Laporan Tilang telah terkirim, tunggu hingga di-ACC.", "ok");
     state.photos.forEach((ph) => URL.revokeObjectURL(ph.url));
@@ -1948,6 +1956,7 @@ function ImpoundScreen({
       subtitle: `${state.owner.trim()} · ${state.fee.trim()}`,
       report: buildImpoundReport(state),
       name: personnel.name,
+      avatarUrl: personnel.avatarUrl,
     });
     showToast("Laporan Impound telah terkirim, tunggu hingga di-ACC.", "ok");
     state.photos.forEach((ph) => URL.revokeObjectURL(ph.url));
@@ -2587,7 +2596,7 @@ function MemberBox({
   logs,
   kindFilter,
   showTanggal,
-  defaultOpen = true,
+  defaultOpen = false,
 }: {
   name: string;
   logs: LogEntry[];
@@ -2598,6 +2607,8 @@ function MemberBox({
   const [open, setOpen] = useState(defaultOpen);
   const [tab, setTab] = useState<"absensi" | "tanggal">("absensi");
   const mine = logs.filter((l) => l.name === name && kindFilter(l.kind)).sort((a, b) => b.savedAt - a.savedAt);
+  const allMine = logs.filter((l) => l.name === name).sort((a, b) => b.savedAt - a.savedAt);
+  const memberAvatarUrl = allMine.find((l) => l.avatarUrl)?.avatarUrl ?? "";
   const todayIso = todayISO();
   const todayStatus = dayDotFor(name, logs, todayIso);
 
@@ -2615,7 +2626,9 @@ function MemberBox({
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
-        <span className="pt-member-avatar">{initials(name)}</span>
+        <span className="pt-member-avatar" aria-label={`Foto profil ${name}`}>
+          <Avatar url={memberAvatarUrl} name={name} />
+        </span>
         <span className="pt-member-name">
           <strong>{name}</strong>
         </span>
@@ -2692,7 +2705,7 @@ function MemberBox({
 }
 
 function AdminMembers({ logs }: { logs: LogEntry[] }) {
-  const [openAbsensi, setOpenAbsensi] = useState(true);
+  const [openAbsensi, setOpenAbsensi] = useState(false);
   const [openLaporan, setOpenLaporan] = useState(false);
 
   const names = Array.from(new Set(logs.map((l) => l.name))).sort((a, b) => a.localeCompare(b));
@@ -4539,7 +4552,9 @@ const css = `
 .pt-member-avatar {
   flex: none; width: 32px; height: 32px; border-radius: 999px; display: flex; align-items: center;
   justify-content: center; font-size: 11.5px; font-weight: 700; background: var(--card); border: 1px solid var(--line);
+  overflow: hidden;
 }
+.pt-member-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .pt-member-name { flex: 1; min-width: 0; }
 .pt-member-name strong { font-size: 13.5px; display: block; }
 .pt-member-chev { flex: none; color: var(--muted); transition: transform 0.2s ease; }
