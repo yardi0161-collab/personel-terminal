@@ -215,6 +215,14 @@ const ArrowLeftIcon = (p: IconProps) => (
     <path d="M19 12H5" />
   </Svg>
 );
+const BookIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 19.5V6a2 2 0 0 1 2-2h13v15.5" />
+    <path d="M6 21.5h13" />
+    <path d="M6 21.5a2 2 0 0 1 0-4h13" />
+    <path d="M9 7h6" />
+  </Svg>
+);
 const ShieldCheckIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
@@ -273,9 +281,10 @@ const CalendarDeco = () => (
 /* ------------------------------------------------------------------ */
 /* Komponen                                                            */
 /* ------------------------------------------------------------------ */
-type Tab = "home" | "log" | "admin";
+type Tab = "home" | "log" | "uud";
 type Screen =
   | Tab
+  | "admin"
   | "absensi"
   | "absensi-form"
   | "cuti"
@@ -288,12 +297,13 @@ type Screen =
 const tabs: { id: Tab; label: string; Icon: (p: IconProps) => JSX.Element }[] = [
   { id: "home", label: "Home", Icon: HomeIcon },
   { id: "log", label: "Log", Icon: HistoryIcon },
-  { id: "admin", label: "Admin", Icon: ShieldCheckIcon },
+  { id: "uud", label: "UUD", Icon: BookIcon },
 ];
 
 const screenTitle: Record<Screen, string> = {
   home: "DUTY & LAPORAN",
   log: "Log",
+  uud: "UUD",
   admin: "Admin",
   absensi: "Absensi",
   "absensi-form": "Form Absensi",
@@ -432,7 +442,6 @@ function HomeScreen({
         <div className="pt-pf">
           <span>Nama</span>
           <strong>{p.name}</strong>
-          <em>Badge #{p.badge}</em>
         </div>
         <div className="pt-pf">
           <span>Pangkat</span>
@@ -442,13 +451,6 @@ function HomeScreen({
           <span>Devisi</span>
           <strong>{p.unit}</strong>
         </div>
-        <button
-          type="button"
-          onClick={p.discordLinked ? onDiscordLogout : onDiscordLogin}
-          className="pt-discord-link"
-        >
-          {p.discordLinked ? "Logout Discord" : "Hubungkan akun Discord"}
-        </button>
       </section>
 
       {/* Statistik */}
@@ -2071,6 +2073,23 @@ function ImpoundScreen({
 }
 
 /* ------------------------------------------------------------------ */
+/* Halaman UUD — Undang-Undang Dasar / peraturan internal              */
+/* ------------------------------------------------------------------ */
+function UudScreen() {
+  return (
+    <div className="pt-stack">
+      <section className="pt-card pt-form-card">
+        <p className="pt-muted">UUD</p>
+        <h2 className="pt-form-title">Undang-Undang Dasar</h2>
+        <p className="pt-muted" style={{ marginTop: 10, lineHeight: 1.6 }}>
+          Halaman ini masih kosong — isi dengan poin-poin peraturan/UUD instansi kamu di sini.
+        </p>
+      </section>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Halaman Log — Log Absensi & Log Laporan                             */
 /* ------------------------------------------------------------------ */
 const LOG_KIND_META: Record<LogKind, { label: string; Icon: (p: IconProps) => JSX.Element }> = {
@@ -3033,7 +3052,15 @@ const TIMING = {
 
 
 /** Menu akun: tiga garis di pojok kanan header, berisi profil singkat & Logout. */
-function AccountMenu({ onLogout }: { onLogout: () => void }) {
+function AccountMenu({
+  onLogout,
+  onOpenAdmin,
+  showAdmin,
+}: {
+  onLogout: () => void;
+  onOpenAdmin: () => void;
+  showAdmin: boolean;
+}) {
   const p = personnel;
   const [open, setOpen] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -3083,6 +3110,20 @@ function AccountMenu({ onLogout }: { onLogout: () => void }) {
                 </span>
               </div>
             </div>
+            {showAdmin && (
+              <button
+                type="button"
+                role="menuitem"
+                className="pt-menu-item"
+                onClick={() => {
+                  setOpen(false);
+                  onOpenAdmin();
+                }}
+              >
+                <ShieldCheckIcon size={18} />
+                <span>Admin</span>
+              </button>
+            )}
             <button
               type="button"
               role="menuitem"
@@ -3722,7 +3763,7 @@ export default function PersonnelTerminal() {
     screen === "tilang" ||
     screen === "impound";
   // Halaman detail dianggap bagian dari tab Home
-  const activeTab: Tab = isDetail ? "home" : (screen as Tab);
+  const activeTab: Tab | null = isDetail ? "home" : screen === "admin" ? null : (screen as Tab);
 
   // Layar loading pembuka tampil dulu (juga selama sesi login masih diperiksa)
   const booting = phase !== "done" && !fast;
@@ -3774,7 +3815,7 @@ export default function PersonnelTerminal() {
                 </span>
                 <h1 className="pt-ops-title">{screen === "laporan" ? "Laporan Ops" : "Absensi Ops"}</h1>
               </div>
-              <AccountMenu onLogout={handleDiscordLogout} />
+              <AccountMenu onLogout={handleDiscordLogout} onOpenAdmin={() => setScreen("admin")} showAdmin={isOnAdminWhitelist(profile.name)} />
             </header>
           ) : (
             <header className="pt-header">
@@ -3791,7 +3832,7 @@ export default function PersonnelTerminal() {
                 ) : (
                   <span className="pt-title">{screenTitle[screen]}</span>
                 )}
-                <AccountMenu onLogout={handleDiscordLogout} />
+                <AccountMenu onLogout={handleDiscordLogout} onOpenAdmin={() => setScreen("admin")} showAdmin={isOnAdminWhitelist(profile.name)} />
               </div>
             </header>
           )}
@@ -3812,6 +3853,7 @@ export default function PersonnelTerminal() {
                   onRemove={removeLog}
                 />
               )}
+              {screen === "uud" && <UudScreen />}
               {screen === "admin" && !isOnAdminWhitelist(profile.name) && (
                 <section className="pt-card">
                   <p className="pt-muted">Kamu tidak memiliki izin untuk membuka halaman ini.</p>
@@ -3892,9 +3934,7 @@ export default function PersonnelTerminal() {
           </main>
 
           <nav className="pt-nav" aria-label="Navigasi utama">
-            {tabs
-              .filter((t) => t.id !== "admin" || isOnAdminWhitelist(profile.name))
-              .map(({ id, label, Icon }) => (
+            {tabs.map(({ id, label, Icon }) => (
               <button
                 key={id}
                 type="button"
@@ -4627,60 +4667,6 @@ const css = `
 .pt-ops-title { font-size: 16px; }
 .pt-status-pill { padding: 2px 7px; font-size: 10px; }
 .pt-seg-btn { padding: 8px 6px; font-size: 12px; }
-
-/* Compact v4 — perkecil lagi sekali lagi, seluruh tampilan */
-.pt-root { font-size: 10.5px; }
-.pt-shell { max-width: 360px; }
-.pt-header { padding: calc(6px + env(safe-area-inset-top, 0px)) 9px 5px; }
-.pt-header-bar { min-height: 34px; padding: 0 9px; border-radius: 13px; }
-.pt-title { font-size: 11px; }
-.pt-avatar { width: 28px; height: 28px; font-size: 10.5px; }
-.pt-card { padding: 9px; border-radius: 15px; }
-.pt-form-card { padding: 10px 9px; }
-.pt-form-title { font-size: 13.5px; }
-.pt-stat { padding: 8px 9px; border-radius: 13px; }
-.pt-icon-circle { width: 25px; height: 25px; margin-bottom: 6px; }
-.pt-deco-stat svg { width: 44px; height: 44px; }
-.pt-stack { gap: 6px; }
-.pt-main { padding: 5px 8px 74px; }
-.pt-nav {
-  width: calc(100% - 16px); bottom: calc(6px + env(safe-area-inset-bottom, 0px));
-  padding: 3px; border-radius: 17px;
-}
-.pt-tab { padding: 6px 5px; border-radius: 11px; font-size: 9.5px; gap: 4px; }
-
-.pt-form { gap: 9px; margin-top: 10px; }
-.pt-field { gap: 4px; }
-.pt-field > span { font-size: 8.5px; }
-.pt-field small { font-size: 9px; }
-.pt-input {
-  min-height: 32px; padding: 5px 8px;
-  border-radius: 9px; font-size: 11.5px;
-}
-.pt-textarea { min-height: 56px; }
-.pt-id3 { padding: 5px 7px; border-radius: 10px; gap: 5px; }
-.pt-id3 span { font-size: 7.5px; }
-.pt-id3 strong { font-size: 10px; }
-.pt-row { gap: 6px; }
-.pt-submit, .pt-secondary { padding: 9px; border-radius: 11px; font-size: 11.5px; }
-.pt-photos { gap: 8px 6px; }
-.pt-photo { border-radius: 11px; }
-.pt-photo-title { font-size: 10.5px; }
-.pt-photo-hint { font-size: 9px; }
-.pt-photo-num { width: 17px; height: 17px; font-size: 9.5px; }
-.pt-photo-x { width: 24px; height: 24px; }
-.pt-log-head { padding: 7px; gap: 6px; }
-.pt-log-ico { width: 26px; height: 26px; border-radius: 9px; }
-.pt-log-title { font-size: 11px; }
-.pt-log-sub { font-size: 9.5px; }
-.pt-log-time { font-size: 8.5px; }
-.pt-log-kind { font-size: 8px; }
-.pt-ops-card { padding: 8px 6px 7px; border-radius: 13px; gap: 5px; }
-.pt-ops-ico { width: 27px; height: 27px; border-radius: 9px; }
-.pt-ops-name { font-size: 10px; }
-.pt-ops-title { font-size: 13.5px; }
-.pt-status-pill { padding: 2px 6px; font-size: 8.5px; }
-.pt-seg-btn { padding: 6px 5px; font-size: 10.5px; }
 
 @media (max-width: 380px) {
   .pt-week .pt-progress-foot { font-size: 11px; gap: 12px; }
